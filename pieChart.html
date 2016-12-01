@@ -17,9 +17,10 @@
 <body>
 <script src="//d3js.org/d3.v4.min.js"></script>
 <script>
-
+//Link this visualization----> http://bl.ocks.org/mbostock/raw/5872848/  
 var dispatch = d3.dispatch("load", "statechange");
 
+//These are the categories that the pie graph shows but it does not show on the website for some reason
 var groups = [
   "Under 5 Years",
   "5 to 13 Years",
@@ -30,6 +31,7 @@ var groups = [
   "65 Years and Over"
 ];
 
+//Reading in their data  
 d3.csv("data.csv", type, function(error, states) {
   if (error) throw error;
   var stateById = d3.map();
