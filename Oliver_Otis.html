@@ -67,11 +67,11 @@ var width = 960,
     height = 500,
     centered;
 
-var color_domain = [500, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500, 6000];
+var color_domain = [50, 100, 200, 350, 550, 800, 1100, 1450, 1850, 2300, 2800, 3500];
 
-var ext_color_domain = [0, 500, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500, 6000];
+var ext_color_domain = [0, 50, 100, 200, 350, 550, 800, 1100, 1450, 1850, 2300, 2800, 3500];
 
-var legend_labels = ["&lt; 500", "500+", "1000+", "1500+", "2000+", "2500+", "3000+", "3500+", "4000+", "4500+", "5000+", "5500+", "6000+"]
+var legend_labels = ["less than 50","50+", "100+", "200+", "350+", "550+", "800+", "1100+", "1450+", "1850+", "2300+", "2800+", "3500+"]
 
 var color = d3.scale.threshold()
 .domain(color_domain)
@@ -82,8 +82,10 @@ var div = d3.select("body").append("div")
 .style("opacity", 0);
 
 var authorById = d3.map();
+var townById = d3.map();
 var stateById = d3.map();
-var letterCount = d3.map();
+var letterCountByState = d3.map();
+var letterCountByCounty = d3.map();
 
 var projection = d3.geo.albersUsa()
     .scale(1070)
@@ -105,36 +107,41 @@ svg.append("rect")
 var g = svg.append("g");
 
 
-
 d3.queue()
   .defer(d3.json, "us.json")
   .defer(d3.json, "data.json")
+  .defer(d3.csv, "letterCounts.csv")
   .await(ready);
 
 
-function ready(error, us, data) {
+function ready(error, us, data, letterCounts) {
   if (error) throw error;
   
-  // var recipientById = {};
-  // var authorById = {};
-  // var townById = {};
-  // var dateById = {};
+  // for (var i = 0; i < data.length; i++) {
+  //   letterCountByState[data[i].state] = 1 + (letterCountByState[data[i].state] || 0);
+  // }
 
-  for (var i = 0; i < data.length; i++) {
-    letterCount[data[i].state] = 1 + (letterCount[data[i].state] || 0);
-  }
+  // This utilizes that last csv file in order to match the appropriate geojson id number
+  // with the according letter count by state and by county
+  letterCounts.forEach(function(d) {
 
+    letterCountByState[d.stateID] = d.stateCount;
+    letterCountByCounty[d.countyID] = d.countyCount;
   
-  
+  });
+
+  // Because states are only identified by the first two digits of a FIPS number
+  // an array (stateId) holds the stripped down id's in order to be able to display state-wide
+  // data over the county-wide data in the tooltip
   var stateId = [];
   data.forEach(function(d) {
 
-    stateId = d.id.substr(0, d.id.length - 3); 
+    stateId = d.id.substr(0, d.id.length - 3);
+    townById[d.id] = d.town;
+    stateById[stateId] = d.state;
+    
     // recipientById[d.id] = d.Recipient;
     // authorById[d.id] = d.Author;
-    // townById[d.id] = d.town;
-    stateById[stateId] = d.state;
-
     // dateById[d.id] = +d.date;
   });
 
@@ -145,8 +152,28 @@ function ready(error, us, data) {
     .data(topojson.feature(us, us.objects.counties).features)
     .enter().append("path")
     .attr("d", path)
+    .style("fill" , function (d) {
+      return color(letterCountByCounty[d.id]);
+    })
     .attr("class", "county-boundary")
-    .on("click", countyclicked);
+    .on("mouseover", function(d) {
+      d3.select(this).transition().duration(300).style("opacity", 1);
+      div.transition().duration(300)
+      .style("opacity", 1)
+
+      div.html("<strong> City/Town: </strong>" + townById[d.id] +
+        "<br><br> <strong> Total Number of Letters: </strong>" + letterCountByCounty[d.id])
+
+      .style("left", (d3.event.pageX) + "px")
+      .style("top", (d3.event.pageY - 50) + "px");
+    })
+
+    .on("mouseout", function() {
+      d3.select(this)
+      .transition().duration(300)
+      div.transition().duration(300)
+      .style("opacity", 0);
+    });
 
   g.append("g")
     .attr("id", "states")
@@ -154,6 +181,9 @@ function ready(error, us, data) {
     .data(topojson.feature(us, us.objects.states).features)
     .enter().append("path")
     .attr("d", path)
+    .style("fill" , function (d) {
+      return color(letterCountByState[d.id]);
+    })
     .attr("class", "state")
     .on("mouseover", function(d) {
       d3.select(this).transition().duration(300).style("opacity", 1);
@@ -161,7 +191,7 @@ function ready(error, us, data) {
       .style("opacity", 1)
 
       div.html("<strong> State: </strong>" + stateById[d.id] +
-        "<br> <strong> Total Number of Letters: </strong>")
+        "<br><br> <strong> Total Number of Letters: </strong>" + letterCountByState[d.id])
 
       .style("left", (d3.event.pageX) + "px")
       .style("top", (d3.event.pageY - 50) + "px");
@@ -181,6 +211,27 @@ function ready(error, us, data) {
     .attr("d", path);
 
 };
+
+
+var legend = svg.selectAll("g.legend")
+    .data(ext_color_domain)
+    .enter().append("g")
+    .attr("class", "legend");
+ 
+var ls_w = 20, ls_h = 20;
+ 
+legend.append("rect")
+    .attr("x", 20)
+    .attr("y", function(d, i){ return height - (i*ls_h) - 2*ls_h;})
+    .attr("width", ls_w)
+    .attr("height", ls_h)
+    .style("fill", function(d, i) { return color(d); })
+    .style("opacity", 0.8);
+ 
+legend.append("text")
+    .attr("x", 50)
+    .attr("y", function(d, i){ return height - (i*ls_h) - ls_h - 4;})
+    .text(function(d, i){ return legend_labels[i]; });
 
 
 function clicked(d) {
@@ -206,10 +257,6 @@ function clicked(d) {
       .duration(750)
       .attr("transform", "translate(" + width / 2 + "," + height / 2 + ")scale(" + k + ")translate(" + -x + "," + -y + ")")
       .style("stroke-width", 1.5 / k + "px");
-}
-
-function countyclicked(d) {
-  //alert(d.id);
 }
 
 </script>
